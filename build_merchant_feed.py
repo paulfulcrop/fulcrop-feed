@@ -52,7 +52,7 @@ REMOVE_PHRASES = ["Check out the Product Sheets HERE."]
 HEADERS = ["id", "item_group_id", "title", "description", "link", "image_link",
            "additional_image_link", "availability", "price", "sale_price", "condition",
            "brand", "gtin", "identifier_exists", "google_product_category",
-           "product_type", "is_bundle"]
+           "product_type", "is_bundle", "shipping_weight"]
 
 
 # ---- Helpers ----------------------------------------------------------------
@@ -101,6 +101,31 @@ def fetch_json(url):
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
+def fetch_weights(url):
+    """Weights (lb) from the product page: per variation, plus the product's own weight."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "FulCrop-feed-builder/1.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            page = r.read().decode("utf-8", "replace")
+    except Exception as e:
+        print(f"  warning: couldn't read weights from {url}: {e}")
+        return {}
+    weights = {}
+    m = re.search(r'data-product_variations="([^"]*)"', page)
+    if m:
+        try:
+            for v in json.loads(html.unescape(m.group(1))) or []:
+                if v.get("weight"):
+                    weights[v["variation_id"]] = v["weight"]
+        except ValueError:
+            pass
+    m = re.search(r'woocommerce-product-attributes-item--weight.*?<td[^>]*>(.*?)</td>', page, re.S)
+    if m:
+        w = re.sub(r"<[^>]+>|[^\d.]", "", m.group(1))
+        if w:
+            weights["parent"] = w
+    return weights
+
 def load_live():
     products, page = [], 1
     while True:
@@ -121,6 +146,8 @@ def load_live():
             in_stock=p.get("is_in_stock", True),
             short=p.get("short_description", ""), description=p.get("description", ""),
             variations=[])
+        weights = fetch_weights(p["permalink"])
+        item["weight"] = weights.get("parent", "")
         for v in p.get("variations", []):
             d = fetch_json(f"{SITE}/wp-json/wc/store/v1/products/{v['id']}")
             item["variations"].append(dict(
@@ -128,6 +155,7 @@ def load_live():
                 sale=d["prices"]["sale_price"] if d.get("on_sale") else "",
                 image=(d.get("images") or [{}])[0].get("src", ""),
                 in_stock=d.get("is_in_stock", True),
+                weight=weights.get(d["id"], weights.get("parent", "")),
                 attributes={a["name"]: a["value"] for a in v.get("attributes", [])}))
         out.append(item)
     return out
@@ -157,7 +185,7 @@ def build_rows(products):
 
         variants = p["variations"] or [dict(id=p["id"], sku=p["sku"], price=p["price"],
                                             sale=p["sale"], image="", in_stock=p["in_stock"],
-                                            attributes={})]
+                                            weight=p.get("weight", ""), attributes={})]
         for v in variants:
             if not v["price"] or int(v["price"]) == 0:
                 skipped.append((f'{p["name"]} (variant {v["id"]})', "price is $0")); continue
@@ -192,6 +220,7 @@ def build_rows(products):
                 "google_product_category": cfg.get("category", ""),
                 "product_type": " > ".join(p["categories"]),
                 "is_bundle": "yes" if cfg.get("is_bundle") else "",
+                "shipping_weight": f"{float(v['weight']):g} lb" if v.get("weight") else "",
             })
     return rows, skipped
 
@@ -214,6 +243,9 @@ def main():
         w.writerows(rows)
     print(f"Wrote {len(rows)} items to {a.output}")
     print(f"  with GTIN: {sum(1 for r in rows if r['gtin'])}")
+    for r in rows:
+        if not r["shipping_weight"]:
+            print(f"  warning: no weight for {r['title']} (set it in WooCommerce)")
     for name, why in skipped:
         print(f"  skipped: {name} — {why}")
 
