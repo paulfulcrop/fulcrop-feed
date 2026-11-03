@@ -1,0 +1,31 @@
+name: Build Merchant Center feed
+
+on:
+  schedule:
+    - cron: "17 9 * * *"     # every day at 09:17 UTC (about 4 AM Eastern)
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build feed from fulcropsciences.com
+        run: python build_merchant_feed.py -o merchant_feed.tsv
+
+      - name: Commit updated feed
+        run: |
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > last_run.txt
+          git config user.name  "feed-bot"
+          git config user.email "feed-bot@users.noreply.github.com"
+          git add merchant_feed.tsv last_run.txt
+          git commit -m "Update Merchant Center feed" || echo "No changes"
+          git push
