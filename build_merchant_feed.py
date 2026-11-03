@@ -41,9 +41,9 @@ VARIANT_TITLES = {
     15559: "FulCrop Sciences Beneficial Spores Duo – Bacillus + Trichoderma, 1 Vial Each",
     15560: "FulCrop Sciences Beneficial Spores Duo – Bacillus + Trichoderma, 1 Case Each",
 }
-EXCLUDE_CATEGORIES = {
-    "Clothing": "merch category: everything is out of stock, and apparel needs color/size/gender data the store doesn't have",
-}
+# Only products in these WooCommerce categories go into the feed. Anything else
+# (lighting, clothing/merch, new categories added later) is left out automatically.
+INCLUDE_CATEGORIES = {"Humate Fertilizer", "Microbes", "Spores", "Amendments", "IQ", "Bundles"}
 # Images whose file name contains any of these are skipped (logos aren't product photos).
 SKIP_IMAGE_WORDS = ["logo"]
 # Phrases removed from descriptions (they don't make sense outside the product page).
@@ -139,9 +139,8 @@ def build_rows(products):
     for p in products:
         if p["id"] in EXCLUDE_IDS:
             skipped.append((p["name"], EXCLUDE_IDS[p["id"]])); continue
-        bad_cat = next((c for c in p["categories"] if c in EXCLUDE_CATEGORIES), None)
-        if bad_cat:
-            skipped.append((p["name"], EXCLUDE_CATEGORIES[bad_cat])); continue
+        if not any(c in INCLUDE_CATEGORIES for c in p["categories"]):
+            skipped.append((p["name"], "category not in INCLUDE_CATEGORIES: " + ", ".join(p["categories"]))); continue
 
         cfg = PRODUCTS.get(p["id"], {})
         base_title = cfg.get("title", p["name"])
