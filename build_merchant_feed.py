@@ -52,7 +52,7 @@ REMOVE_PHRASES = ["Check out the Product Sheets HERE."]
 HEADERS = ["id", "item_group_id", "title", "description", "link", "image_link",
            "additional_image_link", "availability", "price", "sale_price", "condition",
            "brand", "gtin", "identifier_exists", "google_product_category",
-           "product_type", "is_bundle", "shipping_weight"]
+           "product_type", "is_bundle", "shipping_weight", "checkout_link_template"]
 
 
 # ---- Helpers ----------------------------------------------------------------
@@ -221,6 +221,9 @@ def build_rows(products):
                 "product_type": " > ".join(p["categories"]),
                 "is_bundle": "yes" if cfg.get("is_bundle") else "",
                 "shipping_weight": f"{float(v['weight']):g} lb" if v.get("weight") else "",
+                # "Buy" button in Google listings: adds this exact size to the cart and opens checkout.
+                # {id} is required by Google; WooCommerce ignores the extra gmc_id parameter.
+                "checkout_link_template": f"{SITE}/checkout/?add-to-cart={v['id']}&quantity=1&gmc_id={{id}}",
             })
     return rows, skipped
 
